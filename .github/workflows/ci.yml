@@ -56,14 +56,24 @@ jobs:
         with:
           node-version: "18"
 
-      - name: Answers a request with no token configured
+      - name: Stays usable with no backend reachable
         env:
+          # Port 1 is never listening, so the backend is unreachable and no
+          # token is configured — the worst case a fresh install can be in.
           PEN_EDITOR_MCP_URL: http://127.0.0.1:1/api/mcp
         run: |
           set -euo pipefail
-          request='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}'
-          out=$(printf '%s\n' "$request" | timeout 30 node bin/pen-editor-mcp.mjs 2>/dev/null)
+          init='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}'
+          list='{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+          out=$(printf '%s\n%s\n' "$init" "$list" | timeout 30 node bin/pen-editor-mcp.mjs 2>/dev/null)
           echo "$out"
-          # -32001 is the "no auth token configured" error. Reaching it proves
-          # the module loaded, stdin was parsed and the request was answered.
-          echo "$out" | grep -q '"code":-32001'
+          # Both requests must be answered — a hang is the failure mode that
+          # matters most, since the client would block with no error.
+          echo "$out" | grep -q '"id":1'
+          echo "$out" | grep -q '"id":2'
+          # initialize must succeed even unconfigured: an error here makes the
+          # client mark the server dead before it ever sends tools/list, which
+          # would leave the configure tool below permanently undiscoverable.
+          echo "$out" | grep -q '"id":1,"result"'
+          # The escape hatch out of the unconfigured state must be offered.
+          echo "$out" | grep -q 'configure_pen_editor_connection'

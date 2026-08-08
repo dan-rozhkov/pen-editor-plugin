@@ -1,0 +1,17 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "pen-editor",
+  "version": "0.1.0",
+  "description": "Read and edit a live Pen Editor design document from any Agent Plugins compatible client: inspect structure, layout, variables and screenshots for design-to-code, or create and modify designs with the batch_design DSL.",
+  "author": {
+    "name": "Pen Editor"
+  },
+  "license": "MIT",
+  "keywords": [
+    "design",
+    "pen-editor",
+    "mcp",
+    "design-to-code",
+    "ui"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "pen-editor-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Agent Plugins 1.0.0 package for Pen Editor — dev tooling only; the plugin itself is the plain directory contents.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "validate": "vitest run test/manifest.test.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "vitest": "^4.1.8"
+  }
+}

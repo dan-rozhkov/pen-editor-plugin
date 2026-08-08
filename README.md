@@ -18,44 +18,49 @@ Installing it gives the agent:
 
 ## Setup
 
-### 1. Backend
+### Local development (zero-config)
 
-Run `pen-editor-backend` with `MCP_AUTH_TOKEN` set (at least 16 characters,
-otherwise `/api/mcp*` returns 503):
+1. Install the plugin.
+2. Run the backend:
+   ```bash
+   cd pen-editor-backend
+   npm run dev
+   ```
+   With no `MCP_AUTH_TOKEN` set, the backend generates one itself, serves
+   MCP loopback-only, and writes it to `~/.pen-editor/mcp.json`.
+3. Run the editor:
+   ```bash
+   cd pen-editor
+   npm run dev
+   ```
+   It picks up the same token automatically.
+4. Done — the plugin discovers the backend on its own. Most tools need the
+   editor tab open in a browser; `get_guidelines`, `get_style_guide_tags`
+   and `get_style_guide` work without one.
+
+### Remote backend
+
+For a backend that isn't running on localhost, or one with an explicit
+`MCP_AUTH_TOKEN`, point the plugin at it:
 
 ```bash
 cd pen-editor-backend
 MCP_AUTH_TOKEN=<secret-at-least-16-chars> npm run dev
 ```
 
-### 2. Editor tab
-
-Most tools operate on a live editor tab. Open the editor with
-`VITE_MCP_WS_TOKEN` set to the same value as `MCP_AUTH_TOKEN`:
-
 ```bash
 cd pen-editor
 VITE_MCP_WS_TOKEN=<same-secret> npm run dev
 ```
 
-Without a connected tab, those tools return an error. `get_guidelines`,
-`get_style_guide_tags` and `get_style_guide` work without one.
-
 **Note:** `VITE_MCP_WS_TOKEN` is inlined into the public JS bundle at build
 time. Use it only in a local/dev build — never on a publicly deployed
 frontend, or any visitor gets the secret.
 
-### 3. Plugin
-
-Point the plugin at the backend, either through environment variables:
-
-```
-PEN_EDITOR_MCP_URL=https://my-backend.example.com/api/mcp
-PEN_EDITOR_MCP_TOKEN=<secret-at-least-16-chars>
-```
-
-or through `config.json` in the plugin's data directory (the client decides
-the exact path):
+Then tell the plugin the URL and token, either by asking the agent to run
+its `configure_pen_editor_connection` tool (paste the URL and token into
+chat), or by writing `config.json` into the plugin's data directory (the
+client decides the exact path):
 
 ```json
 {
@@ -64,9 +69,11 @@ the exact path):
 }
 ```
 
-Environment variables win over the file. The URL defaults to
-`http://localhost:3001/api/mcp`, so for local development only the token is
-required.
+Environment variables `PEN_EDITOR_MCP_URL` / `PEN_EDITOR_MCP_TOKEN` are also
+supported as a power-user channel — but it's non-portable (not every client
+preserves ambient env vars) and lower precedence than
+`<PLUGIN_DATA>/config.json`, so once `configure_pen_editor_connection` has
+written that file, these env vars no longer have any effect.
 
 ## License
 

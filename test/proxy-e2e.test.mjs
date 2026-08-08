@@ -3,9 +3,28 @@ import { spawn } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = path.join(HERE, "..", "bin", "pen-editor-mcp.mjs");
+
+// Every spawned proxy gets its own throwaway HOME by default (below), so
+// os.homedir() inside the proxy process never resolves to this machine's
+// real home directory - the proxy must never read or write the real
+// ~/.pen-editor/mcp.json during tests.
+function freshHomeDir() {
+  return mkdtempSync(path.join(tmpdir(), "pen-editor-fake-home-"));
+}
+
+/** Write a handshake file at <homeDir>/.pen-editor/mcp.json, like pen-editor-backend does. */
+function writeHandshakeFile(homeDir, { url, token, port, raw }) {
+  const dir = path.join(homeDir, ".pen-editor");
+  mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, "mcp.json");
+  writeFileSync(filePath, raw ?? JSON.stringify({ url, token, port }), { mode: 0o600 });
+  return filePath;
+}
 
 const TIMEOUT = 20_000;
 
@@ -36,10 +55,18 @@ function listen(server) {
   });
 }
 
-/** Spawn the proxy binary with the given env, returning helpers to talk NDJSON over its stdio. */
+/**
+ * Spawn the proxy binary with the given env, returning helpers to talk
+ * NDJSON over its stdio. Unless `env.HOME` (or `env.USERPROFILE`) is
+ * explicitly supplied, defaults both to a fresh empty temp directory so
+ * os.homedir() inside the spawned process can never resolve to this
+ * machine's real home directory - the proxy must never touch the real
+ * ~/.pen-editor/mcp.json during tests.
+ */
 function spawnProxy(env) {
+  const home = env && (env.HOME ?? env.USERPROFILE) !== undefined ? undefined : freshHomeDir();
   const child = spawn(process.execPath, [BIN_PATH], {
-    env: { ...process.env, ...env },
+    env: { ...process.env, ...(home ? { HOME: home, USERPROFILE: home } : {}), ...env },
     stdio: ["pipe", "pipe", "pipe"],
   });
   children.push(child);
@@ -144,7 +171,7 @@ describe("pen-editor-mcp proxy (e2e over real stdio + real http)", () => {
         PEN_EDITOR_MCP_TOKEN: "secret-token",
       });
 
-      proxy.send({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+      proxy.send({ jsonrpc: "2.0", id: 2, method: "resources/list" });
       const line = await proxy.nextLine();
       expect(JSON.parse(line)).toEqual({ jsonrpc: "2.0", id: 2, result: { via: "sse" } });
     },
@@ -182,7 +209,7 @@ describe("pen-editor-mcp proxy (e2e over real stdio + real http)", () => {
       // Follow it with a real request so we have a deterministic point to
       // assert "nothing showed up before this" - the notification must
       // not have produced a stdout line ahead of this response.
-      proxy.send({ jsonrpc: "2.0", id: 99, method: "tools/list" });
+      proxy.send({ jsonrpc: "2.0", id: 99, method: "resources/list" });
 
       const line = await proxy.nextLine();
       const parsed = JSON.parse(line);
@@ -213,7 +240,7 @@ describe("pen-editor-mcp proxy (e2e over real stdio + real http)", () => {
         PEN_EDITOR_MCP_TOKEN: "wrong-token",
       });
 
-      proxy.send({ jsonrpc: "2.0", id: 3, method: "tools/list" });
+      proxy.send({ jsonrpc: "2.0", id: 3, method: "resources/list" });
       const line = await proxy.nextLine();
       const parsed = JSON.parse(line);
       expect(parsed.id).toBe(3);
@@ -241,7 +268,7 @@ describe("pen-editor-mcp proxy (e2e over real stdio + real http)", () => {
         PEN_EDITOR_MCP_TOKEN: "any-token",
       });
 
-      proxy.send({ jsonrpc: "2.0", id: 4, method: "tools/list" });
+      proxy.send({ jsonrpc: "2.0", id: 4, method: "resources/list" });
       const line = await proxy.nextLine();
       const parsed = JSON.parse(line);
       expect(parsed.id).toBe(4);
@@ -268,7 +295,7 @@ describe("pen-editor-mcp proxy (e2e over real stdio + real http)", () => {
         // Deliberately no PEN_EDITOR_MCP_TOKEN and no PEN_EDITOR_PLUGIN_DATA.
       });
 
-      proxy.send({ jsonrpc: "2.0", id: 5, method: "tools/list" });
+      proxy.send({ jsonrpc: "2.0", id: 5, method: "resources/list" });
       const line = await proxy.nextLine();
       const parsed = JSON.parse(line);
       expect(parsed.id).toBe(5);
@@ -298,7 +325,7 @@ describe("pen-editor-mcp proxy (e2e over real stdio + real http)", () => {
         PEN_EDITOR_MCP_TOKEN: "tok",
       });
 
-      proxy.send({ jsonrpc: "2.0", id: 6, method: "tools/list" });
+      proxy.send({ jsonrpc: "2.0", id: 6, method: "resources/list" });
       const line = await proxy.nextLine();
       const parsed = JSON.parse(line);
       expect(parsed.id).toBe(6);
@@ -331,7 +358,7 @@ describe("pen-editor-mcp proxy (e2e over real stdio + real http)", () => {
         PEN_EDITOR_MCP_TOKEN: "super-secret-token-123",
       });
 
-      proxy.send({ jsonrpc: "2.0", id: 7, method: "tools/list" });
+      proxy.send({ jsonrpc: "2.0", id: 7, method: "resources/list" });
       await proxy.nextLine();
       expect(receivedAuth).toBe("Bearer super-secret-token-123");
     },
@@ -368,7 +395,7 @@ describe("pen-editor-mcp proxy (e2e over real stdio + real http)", () => {
         PEN_EDITOR_MCP_TOKEN: undefined,
       });
 
-      proxy.send({ jsonrpc: "2.0", id: 8, method: "tools/list" });
+      proxy.send({ jsonrpc: "2.0", id: 8, method: "resources/list" });
       const line = await proxy.nextLine();
       expect(JSON.parse(line)).toEqual({ jsonrpc: "2.0", id: 8, result: { fromFile: true } });
     },
@@ -414,7 +441,7 @@ describe("pen-editor-mcp proxy (e2e over real stdio + real http)", () => {
         PEN_EDITOR_MCP_TOKEN: "secret-token",
       });
 
-      proxy.send({ jsonrpc: "2.0", id: 10, method: "tools/list" });
+      proxy.send({ jsonrpc: "2.0", id: 10, method: "resources/list" });
       const line = await proxy.nextLine();
       expect(JSON.parse(line)).toEqual({ jsonrpc: "2.0", id: 10, result: { via: "sse-no-terminator" } });
     },
@@ -445,7 +472,7 @@ describe("pen-editor-mcp proxy (e2e over real stdio + real http)", () => {
         PEN_EDITOR_MCP_TOKEN: "secret-token",
       });
 
-      proxy.send({ jsonrpc: "2.0", id: 11, method: "tools/list" });
+      proxy.send({ jsonrpc: "2.0", id: 11, method: "resources/list" });
       // Close stdin immediately, well before the backend's 300ms reply.
       proxy.child.stdin.end();
 
@@ -460,6 +487,288 @@ describe("pen-editor-mcp proxy (e2e over real stdio + real http)", () => {
         proxy.child.on("exit", (code) => resolve(code));
       });
       expect(exitCode).toBe(0);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "reads config from the <HOME>/.pen-editor/mcp.json handshake file when no env vars or PLUGIN_DATA config.json supply anything",
+    async () => {
+      const server = http.createServer((req, res) => {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          const msg = JSON.parse(body);
+          expect(req.headers.authorization).toBe("Bearer handshake-token-1234567890");
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { fromHandshake: true } }));
+        });
+      });
+      servers.push(server);
+      const port = await listen(server);
+
+      const home = freshHomeDir();
+      writeHandshakeFile(home, { url: `http://127.0.0.1:${port}/api/mcp`, token: "handshake-token-1234567890", port });
+
+      const proxy = spawnProxy({
+        HOME: home,
+        USERPROFILE: home,
+        PEN_EDITOR_MCP_URL: undefined,
+        PEN_EDITOR_MCP_TOKEN: undefined,
+        PEN_EDITOR_PLUGIN_DATA: undefined,
+      });
+
+      proxy.send({ jsonrpc: "2.0", id: 20, method: "resources/list" });
+      const line = await proxy.nextLine();
+      expect(JSON.parse(line)).toEqual({ jsonrpc: "2.0", id: 20, result: { fromHandshake: true } });
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "PLUGIN_DATA/config.json wins over the handshake file",
+    async () => {
+      const server = http.createServer((req, res) => {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          const msg = JSON.parse(body);
+          expect(req.headers.authorization).toBe("Bearer config-file-token");
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { via: "config-file" } }));
+        });
+      });
+      servers.push(server);
+      const port = await listen(server);
+
+      const home = freshHomeDir();
+      // Handshake file points at a URL that would fail if ever used.
+      writeHandshakeFile(home, { url: "http://127.0.0.1:1/api/mcp", token: "handshake-token", port: 1 });
+
+      const { mkdtempSync: mkdtemp, writeFileSync: writeFile } = await import("node:fs");
+      const os = await import("node:os");
+      const pluginDataDir = mkdtemp(path.join(os.tmpdir(), "pen-editor-plugin-data-"));
+      writeFile(
+        path.join(pluginDataDir, "config.json"),
+        JSON.stringify({ url: `http://127.0.0.1:${port}/api/mcp`, token: "config-file-token" }),
+      );
+
+      const proxy = spawnProxy({
+        HOME: home,
+        USERPROFILE: home,
+        PEN_EDITOR_PLUGIN_DATA: pluginDataDir,
+        PEN_EDITOR_MCP_URL: undefined,
+        PEN_EDITOR_MCP_TOKEN: undefined,
+      });
+
+      proxy.send({ jsonrpc: "2.0", id: 21, method: "resources/list" });
+      const line = await proxy.nextLine();
+      expect(JSON.parse(line)).toEqual({ jsonrpc: "2.0", id: 21, result: { via: "config-file" } });
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "a stale handshake file (backend since stopped) degrades to a NETWORK error, not a crash",
+    async () => {
+      const home = freshHomeDir();
+      writeHandshakeFile(home, { url: "http://127.0.0.1:1/api/mcp", token: "stale-token-1234567890", port: 1 });
+
+      const proxy = spawnProxy({
+        HOME: home,
+        USERPROFILE: home,
+        PEN_EDITOR_MCP_URL: undefined,
+        PEN_EDITOR_MCP_TOKEN: undefined,
+        PEN_EDITOR_PLUGIN_DATA: undefined,
+      });
+
+      proxy.send({ jsonrpc: "2.0", id: 22, method: "resources/list" });
+      const line = await proxy.nextLine();
+      const parsed = JSON.parse(line);
+      expect(parsed.id).toBe(22);
+      expect(parsed.error.code).toBe(-32003);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "a malformed handshake file is ignored, falling back to the default url with no token",
+    async () => {
+      const home = freshHomeDir();
+      writeHandshakeFile(home, { raw: "{ not valid json" });
+
+      const proxy = spawnProxy({
+        HOME: home,
+        USERPROFILE: home,
+        PEN_EDITOR_MCP_URL: undefined,
+        PEN_EDITOR_MCP_TOKEN: undefined,
+        PEN_EDITOR_PLUGIN_DATA: undefined,
+      });
+
+      proxy.send({ jsonrpc: "2.0", id: 23, method: "resources/list" });
+      const line = await proxy.nextLine();
+      const parsed = JSON.parse(line);
+      expect(parsed.id).toBe(23);
+      expect(parsed.error.code).toBe(-32001); // AUTH: no token configured at all.
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "an absent handshake file (fresh HOME, nothing written) falls back to the default with no token, never throws",
+    async () => {
+      const proxy = spawnProxy({
+        PEN_EDITOR_MCP_URL: undefined,
+        PEN_EDITOR_MCP_TOKEN: undefined,
+        PEN_EDITOR_PLUGIN_DATA: undefined,
+      });
+
+      proxy.send({ jsonrpc: "2.0", id: 24, method: "resources/list" });
+      const line = await proxy.nextLine();
+      const parsed = JSON.parse(line);
+      expect(parsed.id).toBe(24);
+      expect(parsed.error.code).toBe(-32001);
+      expect(parsed.error.message).toContain("PEN_EDITOR_MCP_TOKEN");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "tools/list is augmented with configure_pen_editor_connection on top of the real upstream tool list",
+    async () => {
+      const server = http.createServer((req, res) => {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          const msg = JSON.parse(body);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: { tools: [{ name: "get_editor_state" }] } }));
+        });
+      });
+      servers.push(server);
+      const port = await listen(server);
+
+      const proxy = spawnProxy({
+        PEN_EDITOR_MCP_URL: `http://127.0.0.1:${port}/api/mcp`,
+        PEN_EDITOR_MCP_TOKEN: "secret-token",
+      });
+
+      proxy.send({ jsonrpc: "2.0", id: 25, method: "tools/list" });
+      const line = await proxy.nextLine();
+      const parsed = JSON.parse(line);
+      const names = parsed.result.tools.map((t) => t.name);
+      expect(names).toEqual(["get_editor_state", "configure_pen_editor_connection"]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "tools/list still succeeds with just configure_pen_editor_connection when the upstream backend is entirely unreachable (the escape hatch stays reachable even when nothing else is configured)",
+    async () => {
+      const proxy = spawnProxy({
+        PEN_EDITOR_MCP_URL: undefined,
+        PEN_EDITOR_MCP_TOKEN: undefined,
+        PEN_EDITOR_PLUGIN_DATA: undefined,
+      });
+
+      proxy.send({ jsonrpc: "2.0", id: 26, method: "tools/list" });
+      const line = await proxy.nextLine();
+      const parsed = JSON.parse(line);
+      expect(parsed.id).toBe(26);
+      expect(parsed.error).toBeUndefined();
+      expect(parsed.result.tools.map((t) => t.name)).toEqual(["configure_pen_editor_connection"]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "an unconfigured proxy still completes initialize locally, and the client can then discover configure_pen_editor_connection via tools/list (finding 1's full escape-hatch flow)",
+    async () => {
+      const proxy = spawnProxy({
+        PEN_EDITOR_MCP_URL: undefined,
+        PEN_EDITOR_MCP_TOKEN: undefined,
+        PEN_EDITOR_PLUGIN_DATA: undefined,
+      });
+
+      proxy.send({ jsonrpc: "2.0", id: 29, method: "initialize", params: { protocolVersion: "2025-03-26" } });
+      const initLine = await proxy.nextLine();
+      const initParsed = JSON.parse(initLine);
+      expect(initParsed.id).toBe(29);
+      // No error - a real client would treat an initialize error as a
+      // failed server and never send tools/list at all.
+      expect(initParsed.error).toBeUndefined();
+      expect(initParsed.result.protocolVersion).toBe("2025-03-26");
+      expect(initParsed.result.capabilities).toEqual({ tools: { listChanged: true } });
+
+      proxy.send({ jsonrpc: "2.0", id: 30, method: "tools/list" });
+      const listLine = await proxy.nextLine();
+      const listParsed = JSON.parse(listLine);
+      expect(listParsed.result.tools.map((t) => t.name)).toEqual(["configure_pen_editor_connection"]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "configure_pen_editor_connection writes PLUGIN_DATA/config.json and the very next call uses it - no restart",
+    async () => {
+      let receivedAuth;
+      const server = http.createServer((req, res) => {
+        receivedAuth = req.headers.authorization;
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          const msg = JSON.parse(body);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: {} }));
+        });
+      });
+      servers.push(server);
+      const port = await listen(server);
+
+      const { mkdtempSync: mkdtemp } = await import("node:fs");
+      const os = await import("node:os");
+      const pluginDataDir = mkdtemp(path.join(os.tmpdir(), "pen-editor-plugin-data-"));
+
+      const proxy = spawnProxy({
+        PEN_EDITOR_PLUGIN_DATA: pluginDataDir,
+        PEN_EDITOR_MCP_URL: undefined,
+        PEN_EDITOR_MCP_TOKEN: undefined,
+      });
+
+      proxy.send({
+        jsonrpc: "2.0",
+        id: 27,
+        method: "tools/call",
+        params: {
+          name: "configure_pen_editor_connection",
+          arguments: { url: `http://127.0.0.1:${port}/api/mcp`, token: "freshly-configured-token" },
+        },
+      });
+      const configureLine = await proxy.nextLine();
+      const configureResult = JSON.parse(configureLine);
+      expect(configureResult.id).toBe(27);
+      expect(configureResult.result.isError).toBeFalsy();
+
+      // A notifications/tools/list_changed notification follows the reply
+      // (finding 2), telling the client its connection just changed and it
+      // should re-fetch tools/list rather than only picking up the new
+      // tools after a restart.
+      const notificationLine = await proxy.nextLine();
+      expect(JSON.parse(notificationLine)).toEqual({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+
+      const { readFileSync: readFile, statSync: stat } = await import("node:fs");
+      const configPath = path.join(pluginDataDir, "config.json");
+      expect(JSON.parse(readFile(configPath, "utf8"))).toEqual({
+        url: `http://127.0.0.1:${port}/api/mcp`,
+        token: "freshly-configured-token",
+      });
+      expect(stat(configPath).mode & 0o777).toBe(0o600);
+
+      proxy.send({ jsonrpc: "2.0", id: 28, method: "resources/list" });
+      const nextLine = await proxy.nextLine();
+      const nextParsed = JSON.parse(nextLine);
+      expect(nextParsed).toEqual({ jsonrpc: "2.0", id: 28, result: {} });
+      expect(receivedAuth).toBe("Bearer freshly-configured-token");
     },
     TIMEOUT,
   );

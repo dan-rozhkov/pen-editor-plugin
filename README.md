@@ -16,7 +16,21 @@ Installing it gives the agent:
   (implement an existing design as code), and `pen-editor-setup`
   (diagnose a broken connection).
 
+This plugin's proxy talks to either of two MCP servers, both named
+`pen-editor`, both discovered the same way (see "How the proxy finds the
+backend" in the setup skill) — but with different tool behavior. See
+"Desktop app vs. backend: what differs" below.
+
 ## Setup
+
+### Desktop app (zero-config)
+
+1. Install [`pen-editor-desktop`](../pen-editor-desktop).
+2. Install this plugin.
+3. Done — the app publishes a loopback MCP endpoint and writes
+   `~/.pen-editor/mcp.json` on launch; the plugin discovers it with no
+   backend, no env vars, and no manual token. Open a document in the app
+   and call any tool — it routes into whichever tab is focused.
 
 ### Local development (zero-config)
 
@@ -36,7 +50,8 @@ Installing it gives the agent:
    It picks up the same token automatically.
 4. Done — the plugin discovers the backend on its own. Most tools need the
    editor tab open in a browser; `get_guidelines`, `get_style_guide_tags`
-   and `get_style_guide` work without one.
+   and `get_style_guide` work without one (see the caveat below — this is
+   backend-specific).
 
 ### Remote backend
 
@@ -74,6 +89,31 @@ supported as a power-user channel — but it's non-portable (not every client
 preserves ambient env vars) and lower precedence than
 `<PLUGIN_DATA>/config.json`, so once `configure_pen_editor_connection` has
 written that file, these env vars no longer have any effect.
+
+## Desktop app vs. backend: what differs
+
+Both endpoints answer to the name `pen-editor` and share most of the same
+tool set, but they are different servers with different tool behavior:
+
+- **`get_guidelines`, `get_style_guide_tags`, `get_style_guide`** run
+  server-side against `pen-editor-backend` — no editor tab needed. Against
+  the desktop app, every tool, including these three, is executed in an
+  editor tab; with no tab open (or none registered), they fail the same way
+  any other tool does.
+- **`list_editor_tabs`** exists only against the desktop app. It lists open
+  tabs, their titles, and whether each is active and ready for MCP calls
+  (`mcpReady`). `pen-editor-backend` has no such tool — it has no concept of
+  multiple tabs.
+- **`tabId`** is an optional argument on every other desktop-app tool (get
+  it from `list_editor_tabs`), routing the call to a specific tab instead of
+  whichever one is focused. `pen-editor-backend` does not accept this
+  argument at all — it always routes to its single connected tab.
+
+An agent author who assumes "the three static tools always work without a
+tab" or "there's only one `pen-editor` MCP server" will be surprised by one
+of these two endpoints. Which one is running is not something the plugin
+exposes directly — infer it from whether `list_editor_tabs` is in
+`tools/list`.
 
 ## License
 

@@ -13,8 +13,10 @@ In this order:
 
 1. `<PLUGIN_DATA>/config.json` — the portable config file; this is what `configure_pen_editor_connection` (below) writes. **Highest precedence: once this file has both a url and a token, nothing below it has any effect.**
 2. `PEN_EDITOR_MCP_URL` / `PEN_EDITOR_MCP_TOKEN` env vars — a power-user channel, not guaranteed to survive in every client.
-3. `~/.pen-editor/mcp.json` — a handshake file `pen-editor-backend` writes for itself in local dev when `MCP_AUTH_TOKEN` is left unset: it generates a token, serves MCP loopback-only, and writes `{"url", "token", "port"}` there. `pen-editor`'s dev server reads the same file to pick up the token. This is what makes local dev zero-config — no env vars, no manual file editing.
+3. `~/.pen-editor/mcp.json` — a handshake file two different servers can write to the same path/shape (`{"url", "token", "port"}`): `pen-editor-backend`, in local dev when `MCP_AUTH_TOKEN` is left unset (its dev-server counterpart, `pen-editor`, reads the same file to pick up the token); and `pen-editor-desktop`, which writes it on every launch with no configuration at all. Whichever one last published the file is what the proxy connects to — this is what makes both local dev and the desktop app zero-config, no env vars, no manual file editing.
 4. Default `http://localhost:3001/api/mcp`, no token.
+
+**Two different servers, same name:** `pen-editor-backend` and `pen-editor-desktop` both publish an MCP server named `pen-editor` through this same handshake file, but their tool sets and tool behavior differ — see "Two `pen-editor` endpoints" below before assuming a symptom or fix that's specific to one applies to the other.
 
 `url` and `token` are resolved independently across steps 1–2 (e.g. url from `config.json`, token from an env var is fine). Step 3 is the one exception: its token is a loopback-only secret bound to *its own* url, so it's only ever consulted while `url` is still unresolved — if `config.json` or an env var already pinned `url` to something else, the handshake file is skipped entirely rather than pairing its token with a foreign url. If you see a clean "no token configured" error even though `~/.pen-editor/mcp.json` clearly has one, this is almost always why: something upstream already resolved `url`.
 
@@ -32,12 +34,28 @@ Even fully unconfigured, `initialize` still completes locally (rather than faili
 | The user pasted a remote backend URL and token into chat, but tools still fail | The plugin doesn't know about it yet — pasting text into chat doesn't configure anything by itself | Call the `configure_pen_editor_connection` tool with `{url, token}`. It writes `<PLUGIN_DATA>/config.json` and takes effect on the very next tool call, no restart needed. Don't ask the user to find or edit a config file themselves — they don't know its path |
 | "No Pen Editor tab is connected. Open the editor in a browser with MCP enabled (VITE_MCP_WS_TOKEN set)." | No browser tab is currently connected over the WebSocket bridge, or the tab was closed | Open the Pen Editor app in a browser. In local zero-config mode it picks up the handshake token itself; otherwise set `VITE_MCP_WS_TOKEN` to match the backend's `MCP_AUTH_TOKEN`. Keep that tab open |
 | A bridged tool call times out (after 30s) | The connected tab is open but unresponsive (e.g. a stuck render, or the page lost focus mid-heavy-operation) | Check the tab is alive and interactive; reload it if not, then retry the call |
+| Desktop app: MCP tool error is the exact string "The Pen Editor tab is running an older build that does not support the desktop MCP bridge (needs bridge protocol >= 1, tab reported none). Restart the app to pick up the current deployed editor." | The focused/targeted tab loaded a page old enough that it never calls `registerMcpBridge`, so the desktop app's dispatcher has no registration for it | Restart `pen-editor-desktop` (or open a new tab) so it loads the current deployed editor bundle, which registers the bridge on load |
+| Desktop app: no tools work at all, tab strip indicator is amber/hidden, or the File menu's disabled "MCP: …" line reads "Not published (another server is running)" or "Off" | A live `pen-editor-backend` already owns `~/.pen-editor/mcp.json` (the app refuses to clobber a live owner — it stays `not-published`), or the app hasn't published anything yet (`off`) | Either stop the local backend, or use the app's **File → "Use this app for MCP"** menu item to force-publish over it. No action needed to recover the other way: once the backend that was clobbering it exits, the app notices on its own (it watches the handshake file) and republishes automatically |
+| Desktop app: File menu's disabled "MCP: …" line reads "Failed to start (see \"Use this app for MCP\")", tab strip indicator is red | The app's local HTTP server failed to bind, or bound but couldn't write the handshake file (e.g. `~/.pen-editor` not writable) | Use **File → "Use this app for MCP"** to retry, or restart the app. Check that `~/.pen-editor` is writable if it keeps failing |
+| Desktop app: `list_editor_tabs` isn't in `tools/list`, or a `tabId` argument is rejected/ignored | The plugin is actually connected to `pen-editor-backend`, not `pen-editor-desktop` — `list_editor_tabs` and `tabId` routing exist only on the desktop endpoint | If you expected the desktop app, check which one actually owns `~/.pen-editor/mcp.json` right now (see the coexistence row above) |
 
 ## Which tools need what
 
-- **Bridged tools** (`get_editor_state`, `batch_get`, `snapshot_layout`, `get_variables`, `get_screenshot`, `batch_design`, `set_variables`) all require a live, connected editor tab. Every symptom above involving "no tab connected" or a 30s timeout applies only to these.
-- **Static tools** (`get_guidelines`, `get_style_guide_tags`, `get_style_guide`) run entirely on the backend and work as soon as the backend is reachable and authenticated — no browser tab needed. If these work but the bridged tools don't, the problem is specifically the tab connection, not auth or the backend process.
+- **Bridged tools** (`get_editor_state`, `batch_get`, `snapshot_layout`, `get_variables`, `get_screenshot`, `batch_design`, `set_variables`) all require a live, connected editor tab against either endpoint. Every symptom above involving "no tab connected" or a 30s timeout applies to these.
+- **`get_guidelines`, `get_style_guide_tags`, `get_style_guide`** behave differently per endpoint — this is not one fixed category:
+  - Against `pen-editor-backend`, these run entirely server-side and work as soon as the backend is reachable and authenticated — no browser tab needed. If these work but the bridged tools don't, the problem is specifically the tab connection, not auth or the backend process.
+  - Against `pen-editor-desktop`, there is no server-side execution path at all — every tool, these three included, is dispatched into the focused (or `tabId`-selected) editor tab. A tab must be open and registered, or they fail exactly like a bridged tool would (see the "no tab connected" / upgrade-error rows above).
+- **`list_editor_tabs`** (desktop only) needs no tab at all — the app answers it itself from tab metadata it already tracks, without a page round-trip. It's the one tool that's always available whenever the desktop app is reachable, regardless of tab state.
 - **`configure_pen_editor_connection`** is handled entirely by the proxy itself, locally — it never touches the backend or the editor tab, and works even when nothing else is configured (it's always listed in `tools/list`, even when a real tools/list call to the backend fails). Use it to fix everything above except the tab connection.
+
+## Two `pen-editor` endpoints
+
+The proxy can end up pointed at either of two different MCP servers that both identify themselves as `pen-editor`, with different tool sets:
+
+- **`pen-editor-backend`** — the tools listed in "Which tools need what" above, no `list_editor_tabs`, no `tabId` argument on anything.
+- **`pen-editor-desktop`** — the same bridged tools plus `list_editor_tabs`, and every tool (including `get_guidelines`/`get_style_guide_tags`/`get_style_guide`) accepts an optional `tabId` to target a specific open tab instead of whichever one is focused; omit it to target the focused tab.
+
+There's no dedicated "which one am I talking to" tool — check for `list_editor_tabs` in `tools/list` to tell them apart.
 
 ## Multi-tab behavior
 

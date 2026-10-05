@@ -127,6 +127,20 @@ describe("openai skills", () => {
   }
 });
 
+describe("sideform-design embed-first guidance", () => {
+  const text = readFileSync(path.join(ROOT, "openai/skills/sideform-design/SKILL.md"), "utf8");
+  it('tells the agent to load_skill("prototype") and use embed nodes', () => {
+    expect(text).toContain('load_skill("prototype")');
+    expect(text).toMatch(/embed/);
+    expect(text).toContain("read_embed_html");
+    expect(text).toContain("edit_embed_html");
+  });
+  it("does not instruct native frame creation for new screens", () => {
+    expect(text).not.toMatch(/I\(document,\s*\{\s*type:\s*"(frame|rect|text|group)"/);
+    expect(text).toMatch(/never create a new top-level native node/i);
+  });
+});
+
 describe("npm run package:openai", () => {
   it("builds a zip with package files at the root", () => {
     execFileSync("node", ["scripts/package-openai.mjs"], { cwd: ROOT, stdio: "pipe" });

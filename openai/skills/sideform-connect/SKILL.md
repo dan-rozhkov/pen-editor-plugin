@@ -28,4 +28,4 @@ If a tool reports that no editor is open, do step 1 or 2, then call the tool aga
 
 ## Next step
 
-When connected, use `sideform-design` to build or edit a design, or `sideform-dev-mode` to implement a design as code.
+When connected, use `sideform-design` to build or edit a design (new screens are HTML embeds, built with `load_skill("prototype")`), or `sideform-dev-mode` to implement a design as code.

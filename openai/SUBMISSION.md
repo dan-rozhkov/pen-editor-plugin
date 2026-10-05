@@ -33,32 +33,32 @@ Sideform has no cloud documents. The canvas opened by `open_canvas` starts empty
 ### 1
 - description: Open the live canvas widget and design a new screen.
 - prompt: Open a Sideform canvas and design a mobile login screen with email, password and a primary button.
-- tools_triggered: open_canvas, get_guidelines, get_style_guide, batch_design, get_screenshot, snapshot_layout
-- expected_behavior: The canvas widget appears in the chat. The assistant creates a login frame with the requested fields and button via batch_design, then checks the result with a screenshot or layout snapshot and describes it.
+- tools_triggered: open_canvas, load_skill, get_editor_state, get_guidelines, batch_design, get_screenshot
+- expected_behavior: The canvas widget appears in the chat. The assistant loads the prototype skill and creates the login screen as one embed node with the requested fields and button via batch_design, then checks the result with a screenshot or layout snapshot and describes it.
 
 ### 2
 - description: Restyle a design with variables.
 - prompt: Open a Sideform canvas and design a mobile login screen. Then restyle it with a dark theme. Use variables for the colors.
-- tools_triggered: open_canvas, batch_design, set_variables, get_variables, get_screenshot
-- expected_behavior: The assistant first creates the login screen. It then defines color variables (set_variables), applies dark fills and text colors with batch_design, reads the variables back with get_variables, and confirms the change with a screenshot.
+- tools_triggered: open_canvas, load_skill, batch_design, read_embed_html, edit_embed_html, set_variables, get_variables, get_screenshot
+- expected_behavior: The assistant first creates the login screen as an embed. It then defines color variables (set_variables), restyles the screen to a dark theme with read_embed_html and edit_embed_html, reads the variables back with get_variables, and confirms the change with a screenshot.
 
 ### 3
 - description: Design-to-code. The design is read only; the code appears in the chat.
 - prompt: Open a Sideform canvas and design a pricing card with a plan name, price, three features and a button. Then implement the card as a React component with Tailwind.
-- tools_triggered: open_canvas, batch_design, get_editor_state, batch_get, snapshot_layout, get_variables, get_screenshot
-- expected_behavior: The assistant creates the pricing card. It then reads structure, computed layout, tokens and a screenshot, and writes matching component code in the chat. It does not change the design after it starts the code step.
+- tools_triggered: open_canvas, load_skill, batch_design, get_editor_state, read_embed_html, get_screenshot
+- expected_behavior: The assistant creates the pricing card. It then reads the embed HTML (read_embed_html) and a screenshot, and writes matching component code in the chat. It does not change the design after it starts the code step.
 
 ### 4
 - description: Work with design comments.
-- prompt: Open a Sideform canvas and design a mobile login screen. Leave a comment on the login frame that says "Check the button contrast". Then list the comments and resolve that comment.
-- tools_triggered: open_canvas, batch_design, leave_comment, read_comments, resolve_comment
-- expected_behavior: The assistant creates the login frame, posts the comment on it, lists the comments, resolves the thread and reports what it changed.
+- prompt: Open a Sideform canvas and design a mobile login screen. Leave a comment on the login screen that says "Check the button contrast". Then list the comments and resolve that comment.
+- tools_triggered: open_canvas, load_skill, batch_design, leave_comment, read_comments, resolve_comment
+- expected_behavior: The assistant creates the login screen as an embed, posts the comment on that embed with leave_comment, lists the comments, resolves the thread and reports what it changed.
 
 ### 5
 - description: Place a new screen next to an existing one without overlap.
 - prompt: Open a Sideform canvas and design a mobile login screen. Then design a settings screen next to it, so that the two screens do not overlap.
-- tools_triggered: open_canvas, batch_design, find_empty_space_on_canvas, get_screenshot
-- expected_behavior: The assistant creates the login screen, asks for free canvas space with find_empty_space_on_canvas, and builds the settings screen there. The two frames do not overlap.
+- tools_triggered: open_canvas, load_skill, batch_design, find_empty_space_on_canvas, get_screenshot
+- expected_behavior: The assistant creates the login screen as an embed, asks for free canvas space with find_empty_space_on_canvas, and builds the settings screen there as a second embed in its own batch_design call. The two embeds do not overlap.
 
 ## Negative test cases
 

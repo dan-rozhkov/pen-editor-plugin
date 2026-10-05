@@ -10,7 +10,8 @@
   },
   "scripts": {
     "test": "vitest run",
-    "validate": "vitest run test/manifest.test.mjs"
+    "validate": "vitest run test/manifest.test.mjs",
+    "package:openai": "node scripts/package-openai.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

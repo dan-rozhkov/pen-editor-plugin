@@ -1,0 +1,48 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "sideform",
+  "version": "0.1.0",
+  "description": "Design live UI from chat with Sideform: build and edit designs on a canvas, and read them back as structure, layout, tokens and screenshots for design-to-code.",
+  "author": {
+    "name": "Sideform"
+  },
+  "license": "MIT",
+  "keywords": [
+    "design",
+    "ui",
+    "canvas",
+    "design-to-code",
+    "mcp"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Sideform",
+        "shortDescription": "Design live UI from chat",
+        "longDescription": "Sideform is a canvas-based design editor that you can drive from chat. Describe a screen, a component or a whole flow and the assistant builds it on your canvas, then reads it back and refines it until it looks right.\n\nIn clients that support MCP Apps, the open_canvas tool shows your live canvas right inside the conversation, so you can watch designs appear and change as the assistant works. In other clients, keep the Sideform editor open and signed in at app.sideform.pro/app in a browser tab, and the assistant edits that canvas.\n\nWhat the assistant can do: inspect the document structure, computed layout, design variables and screenshots; create and modify frames, text, shapes, components and variables; rename layers; find free space on the canvas; read, reply to, resolve and leave comments; and load design guidelines and style guides for visual direction.\n\nDesign-to-code: the assistant can read an existing design (structure, exact layout rectangles, tokens and a screenshot) and write matching frontend code in your project, without changing the design itself.\n\nA Sideform account is required. Sign in with OAuth when you connect, or use an API key created at app.sideform.pro/account. Your designs live in your own Sideform editor and canvas; Sideform's tools only read and edit your Sideform canvas; any code is written by your assistant with its own tools.",
+        "developerName": "Sideform",
+        "category": "Design",
+        "capabilities": [
+          "Read",
+          "Write",
+          "Design",
+          "Design-to-code",
+          "Comments"
+        ],
+        "websiteURL": "https://app.sideform.pro",
+        "supportURL": "https://app.sideform.pro/support",
+        "privacyPolicyURL": "https://app.sideform.pro/privacy",
+        "termsOfServiceURL": "https://app.sideform.pro/terms",
+        "defaultPrompt": [
+          "Open a Sideform canvas and design a mobile login screen",
+          "Design a login screen, then restyle it with a dark theme using variables",
+          "Design a pricing card, then implement it as a React component",
+          "Design a login screen, leave a comment on it, then resolve the comment"
+        ],
+        "brandColor": "#6E56CF",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/logo.png"
+      }
+    }
+  }
+}

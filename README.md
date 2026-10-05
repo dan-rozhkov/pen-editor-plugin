@@ -115,6 +115,18 @@ of these two endpoints. Which one is running is not something the plugin
 exposes directly — infer it from whether `list_editor_tabs` is in
 `tools/list`.
 
+## OpenAI plugin directory package
+
+A separate build targets the OpenAI plugin directory: a hosted `sideform`
+server (`https://api.sideform.pro/mcp`, streamable HTTP) with no local proxy.
+Its sources live in `openai/` (`plugin.json`, `mcp.json`, `skills/`,
+`assets/`, and `SUBMISSION.md` with dashboard values, test cases and the
+owner checklist). The local proxy package above is unchanged.
+
+```bash
+npm run package:openai   # -> dist/sideform-openai.zip
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
